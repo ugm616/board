@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fuse-Box Engineering Puzzle</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #c5c8c6;
+      font-family: "Consolas", monospace;
+    }
+    #surplus-pool {
+      display: grid;
+      grid-template-columns: repeat(9, 60px);
+      grid-auto-rows: 25px;
+      gap: 0.5rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .pool-slot-initial {
+      width: 60px;
+      height: 25px;
+      background: #2e2e2e;
+      border: 2px dashed #555;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .fuse {
+      width: 60px;
+      height: 25px;
+      background: #444;
+      border: 2px solid #555;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: grab;
+      user-select: none;
+      color: #c5c8c6;
+    }
+    .section {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .fuse-box {
+      background: #2a2a2a;
+      padding: 10px;
+      border: 2px solid #555;
+      border-radius: 6px;
+      width: 220px;
+      text-align: center;
+    }
+    .fuse-box.correct {
+      border-color: #6a0;
+    }
+    .fuse-box button {
+      margin-top: 8px;
+      width: 100%;
+      padding: 4px;
+      background: #555;
+      border: none;
+      color: #c5c8c6;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .box-msg {
+      margin-top: 8px;
+      height: 1.2em;
+      font-family: monospace;
+      color: #c5c8c6;
+    }
+    .slot {
+      width: 70px;
+      height: 35px;
+      background: #2e2e2e;
+      border: 2px dashed #555;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pool-slot {
+      width: calc(3 * 60px + 2 * 0.5rem);
+      height: 35px;
+      background: #2e2e2e;
+      border: 2px dashed #555;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: monospace;
+      color: #888;
+      margin: 0.5rem auto 0;
+    }
+    #device-section {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 2rem;
+    }
+    .device {
+      position: relative;
+      width: 440px;
+      min-height: 120px;
+      background: #2a2a2a;
+      padding: 10px;
+      border: 2px solid #555;
+      border-radius: 6px;
+      text-align: center;
+    }
+    .device.active {
+      border-color: #6a0;
+    }
+    .requirement {
+      font-family: monospace;
+      margin-bottom: 8px;
+    }
+    .device-slot {
+      position: absolute;
+      width: 100px;
+      height: 35px;
+      background: #2e2e2e;
+      border: 2px dashed #555;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .device-slot.top-left {
+      top: 10px;
+      left: 10px;
+    }
+    .device-slot.bottom-right {
+      bottom: 10px;
+      right: 10px;
+    }
+    .modal {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.9);
+      opacity: 0;
+      visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 1s ease;
+    }
+    .modal.show {
+      opacity: 1;
+      visibility: visible;
+    }
+    .modal-content {
+      background: #222;
+      color: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      max-width: 80%;
+      max-height: 80%;
+      overflow: auto;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="surplus-pool"></div>
+  <div id="box-section" class="section"></div>
+  <div id="device-section" style="display:none;">
+    <div id="device-section-inner"></div>
+  </div>
+  <div id="completion-modal" class="modal">
+    <div class="modal-content" id="completion-content">
+      <!-- Customize your final message/video/html here -->
+      <h2>Congratulations!</h2>
+      <p>You’ve powered all devices.</p>
+    </div>
+  </div>
+
+  <script>
+    const NUM_BOXES     = 6;
+    const SLOTS_PER_BOX = 3;
+    const TOTAL_FUSES   = Math.floor(NUM_BOXES * SLOTS_PER_BOX * 1.5);
+    const DEVICE_COUNT  = 3;
+    let boxes       = [];
+    let fuseValues  = [];
+    let fuseCodes   = [];
+    let devicePairs = [];
+    let placedOnDev = {};
+    const randInt = (min,max) => Math.floor(Math.random()*(max-min+1))+min;
+    function shuffle(arr){
+      for(let i=arr.length-1;i>0;i--){
+        let j = Math.floor(Math.random()*(i+1));
+        [arr[i],arr[j]] = [arr[j],arr[i]];
+      }
+    }
+    function genCode(existing){
+      const letters="ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+      let code;
+      do{
+        code=letters[randInt(0,25)]+letters[randInt(0,25)]
+           +randInt(0,9)+randInt(0,9)+randInt(0,9);
+      }while(existing.has(code));
+      existing.add(code);
+      return code;
+    }
+    for(let i=0;i<NUM_BOXES;i++){
+      let vals=Array.from({length:SLOTS_PER_BOX},()=>randInt(1,9));
+      let targ=vals.reduce((a,b)=>a+b,0);
+      boxes.push({values:vals,target:targ,solved:false});
+      fuseValues.push(...vals);
+    }
+    for(let k=TOTAL_FUSES-fuseValues.length;k>0;k--){
+      fuseValues.push(randInt(1,9));
+    }
+    shuffle(fuseValues);
+    let used=new Set();
+    fuseValues.forEach(v=>fuseCodes.push(genCode(used)));
+    const poolEl=document.getElementById("surplus-pool");
+    for(let idx=0;idx<TOTAL_FUSES;idx++){
+      let slot=document.createElement("div");
+      slot.className="pool-slot-initial";
+      slot.dataset.slotIndex=idx;
+      slot.addEventListener("dragover",e=>e.preventDefault());
+      slot.addEventListener("drop",e=>{
+        e.preventDefault();
+        let fid=e.dataTransfer.getData("text/plain"),
+            fuseEl=document.getElementById(fid);
+        if(fuseEl)slot.appendChild(fuseEl);
+      });
+      let fuse=document.createElement("div");
+      fuse.className="fuse";
+      fuse.id=`fuse-${idx}`;
+      fuse.draggable=true;
+      fuse.dataset.voltage=fuseValues[idx];
+      fuse.dataset.code=fuseCodes[idx];
+      fuse.textContent=fuseCodes[idx];
+      fuse.addEventListener("dragstart",e=>
+        e.dataTransfer.setData("text/plain",fuse.id)
+      );
+      slot.appendChild(fuse);
+      poolEl.appendChild(slot);
+    }
+    const boxSection=document.getElementById("box-section");
+    boxes.forEach((box,bi)=>{
+      let cont=document.createElement("div");
+      cont.className="fuse-box";
+      cont.id=`box-${bi}`;
+      let lbl=document.createElement("div");
+      lbl.textContent=`Box ${String.fromCharCode(65+bi)} – ${box.target}V`;
+      cont.appendChild(lbl);
+      let wrap=document.createElement("div");
+      wrap.style.display="flex";
+      wrap.style.gap="0.5rem";
+      for(let si=0;si<SLOTS_PER_BOX;si++){
+        let slot=document.createElement("div");
+        slot.className="slot";
+        slot.dataset.boxIndex=bi;
+        slot.addEventListener("dragover",e=>e.preventDefault());
+        slot.addEventListener("drop",e=>{
+          e.preventDefault();
+          let fid=e.dataTransfer.getData("text/plain"),
+              fuseEl=document.getElementById(fid);
+          if(fuseEl){
+            slot.appendChild(fuseEl);
+            cont.classList.remove("correct");
+            cont.querySelector(".box-msg").textContent="";
+            boxes[bi].solved=false;
+          }
+        });
+        wrap.appendChild(slot);
+      }
+      cont.appendChild(wrap);
+      let back=document.createElement("div");
+      back.className="pool-slot";
+      back.textContent="Remove";
+      back.addEventListener("dragover",e=>e.preventDefault());
+      back.addEventListener("drop",e=>{
+        e.preventDefault();
+        let fid=e.dataTransfer.getData("text/plain"),
+            fuseEl=document.getElementById(fid);
+        if(!fuseEl)return;
+        let empty=[...document.querySelectorAll(".pool-slot-initial")]
+          .find(s=>s.children.length===0);
+        if(empty)empty.appendChild(fuseEl);
+        cont.classList.remove("correct");
+        cont.querySelector(".box-msg").textContent="";
+        boxes[bi].solved=false;
+      });
+      cont.appendChild(back);
+      let btn=document.createElement("button");
+      btn.textContent="Test Box";
+      btn.addEventListener("click",()=>{
+        let placed=Array.from(cont.querySelectorAll(".slot"))
+          .map(s=>s.querySelector(".fuse"))
+          .filter(Boolean)
+          .map(f=>+f.dataset.voltage);
+        let msg=cont.querySelector(".box-msg");
+        if(placed.length<SLOTS_PER_BOX){
+          msg.textContent="";
+        } else {
+          let sum=placed.reduce((a,b)=>a+b,0);
+          if(sum===box.target){
+            box.solved=true;
+            cont.classList.add("correct");
+            cont.draggable=true;
+            cont.addEventListener("dragstart",e=>
+              e.dataTransfer.setData("text/plain",cont.id)
+            );
+            msg.textContent=`${sum}V ✔`;
+            if(boxes.every(b=>b.solved))startStage2();
+          } else {
+            msg.textContent=`${sum}V ✖`;
+          }
+        }
+      });
+      cont.appendChild(btn);
+      let msg=document.createElement("div");
+      msg.className="box-msg";
+      cont.appendChild(msg);
+      boxSection.appendChild(cont);
+    });
+    function startStage2(){
+      document.getElementById("device-section").style.display="flex";
+      let idxs=[...Array(NUM_BOXES).keys()];
+      shuffle(idxs);
+      for(let i=0;i<DEVICE_COUNT;i++){
+        devicePairs.push(idxs.splice(0,2));
+      }
+      const devWrap=document.getElementById("device-section-inner");
+      devicePairs.forEach((pair,di)=>{
+        let dev=document.createElement("div");
+        dev.className="device";
+        dev.id=`device-${di}`;
+        let avg=Math.floor(
+          (boxes[pair[0]].target+boxes[pair[1]].target)/2
+        );
+        let req=document.createElement("div");
+        req.className="requirement";
+        req.textContent=`Requires ${avg}V`;
+        dev.appendChild(req);
+        placedOnDev[di]=[];
+        let slotA=document.createElement("div");
+        slotA.className="device-slot top-left";
+        slotA.addEventListener("dragover",e=>e.preventDefault());
+        slotA.addEventListener("drop",e=>{
+          e.preventDefault();
+          attachBox(e,di,pair,avg);
+        });
+        dev.appendChild(slotA);
+        let slotB=document.createElement("div");
+        slotB.className="device-slot bottom-right";
+        slotB.addEventListener("dragover",e=>e.preventDefault());
+        slotB.addEventListener("drop",e=>{
+          e.preventDefault();
+          attachBox(e,di,pair,avg);
+        });
+        dev.appendChild(slotB);
+        devWrap.appendChild(dev);
+      });
+    }
+    function attachBox(e,di,pair,required){
+      let bid=e.dataTransfer.getData("text/plain");
+      if(!bid.startsWith("box-"))return;
+      let idx=+bid.split("-")[1];
+      if(!pair.includes(idx))return;
+      if(placedOnDev[di].includes(idx))return;
+      if(placedOnDev[di].length>=2)return;
+      placedOnDev[di].push(idx);
+      e.currentTarget.appendChild(document.getElementById(bid));
+      if(placedOnDev[di].length===2){
+        let sum=boxes[placedOnDev[di][0]].target
+               +boxes[placedOnDev[di][1]].target;
+        if(sum/2===required){
+          document.getElementById(`device-${di}`)
+                  .classList.add("active");
+          if(document.querySelectorAll('.device.active').length===DEVICE_COUNT){
+            document.body.style.overflow='hidden';
+            document.getElementById('completion-modal')
+              .classList.add('show');
+          }
+        }
+      }
+    }
+  </script>
+</body>
+</html>
